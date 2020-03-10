@@ -163,3 +163,35 @@ MongoDB driver has speed and concurrency.
                   wiredTiger:
                     engineConfig:
                       cacheSizeGB: .1 
+        - If they are running you can shutdown with  
+                
+                use admin
+                db.shutdownServer()
+                // and restart with 
+                mongod -f mongod-1.conf 
+                
+        - P.S. : You can connect to any member of replica set with `mongo --port <port number> -u "m103-admin" -p "m103-pass" --authenticationDatabase "admin"`        
+        - To add these clusters to mongos 
+            - Connect to mongos
+            
+                    mongo --port <port number> --username m103-admin --password m103-pass --authenticationDatabase admin
+            
+            `sh.addShard("<replica set name>/primary members ip: primary members port number")`
+
+        - Now you have one mongos, one SCRS (Sharding Cluster Replica Set) and one Cluster (Replica Set)
+
+- **Sharding the Collection**
+    
+    - Connect to mongos
+    - Enable sharding first to any database
+    
+            `sh.enableSharding("<database name>")`
+    - Choose proper **shard key** from a collection
+    - First create an Index for this key
+    
+               db.<database name>.createIndex({"<shard_key>": 1})
+    - Now shard the collection with the command:
+    
+            db.adminCommand( { shardCollection: "<database name>.<collectionname>", key: { <shard_key>: 1 } } ) 
+
+    - thats all for now.
