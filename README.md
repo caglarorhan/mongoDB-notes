@@ -36,7 +36,8 @@ MongoDB driver has speed and concurrency.
 
 
 ---
-**Replication**
+**Replication and Setting Up a Shardered Cluster**
+
 - **Setting up a Replica Set**
  
     MongoDB stores data where you set it on the config file (for sample conf file look below)
@@ -49,26 +50,116 @@ MongoDB driver has speed and concurrency.
     - Create key file for secure connections between nodes 
         - Use `openssl rand -base64 741 > /folder/path/nameof-keyfile`
     - Start mongo daemon with `mongod -f mongod-1.conf`
-    - Start/run any odd number of mongod nodes. Odd is required to election (voting) for Primer.
-    - Connect first node you create with `mongo --port <given port on conf file>`    
+    - Start/run any odd number of mongod nodes. Odd is required to election (voting) for Primer. (3, 5, 7, 9, etc)
+    - Connect first node you create with `mongo --port <given port on conf file>`  
+    - Initiating the replica set (replica sets name retrieved from conf files)
+        - `rs.initiate()`  
+    - Create user with first time local exception access (with chosen user name and password)
+    
+            use admin
+            db.createUser({
+              user: "m103-admin",
+              pwd: "m103-pass",
+              roles: [
+                {role: "root", db: "admin"}
+              ]
+            })
+    - Exit mongo shell with `exit` and connect to entire replica set (any node's ip with port number)
+        - `mongo --host "m103/192.168.103.100:27001" `   
+        - after login you can check replica set status with `rs.status()` or get the overview of replica set topology with `rs.isMaster()`
+    - To add other nodes (members) to this replica set continue with:
+        - `rs.add("m103:27002")`  
+        - `rs.add("m103:27003")`      
+    - Check replica topology again with `rs.isMaster()`            
 
-**Sample Config File for A Node of Replica Set**
+    - Sample config file (.conf) for a node of replica set
 
-    storage:
-      dbPath: "/data/db"
-    systemLog:
-      path: "/data/log/mongod.log"
-      destination: "file"
-    replication:
-      replSetName: M103
-    net:
-      bindIp : "127.0.0.1,192.168.103.100"
-      port: 27000
-    tls:
-      mode: "requireTLS"
-      certificateKeyFile: "/etc/tls/tls.pem"
-      CAFile: "/etc/tls/TLSCA.pem"
-    security:
-      keyFile: "/data/keyfile"
-    processManagement:
-      fork: true
+            storage:
+              dbPath: "/data/db"
+            systemLog:
+              path: "/data/log/mongod.log"
+              destination: "file"
+            replication:
+              replSetName: m103
+            net:
+              bindIp : "127.0.0.1,192.168.103.100"
+              port: 27001
+            security:
+              keyFile: "/data/keyfile"
+            processManagement:
+              fork: true
+
+- **Setting Up a Sharded Cluster**
+    - **INFORMATIONS** 
+        - The way distribute data in MongoDB is called Sharding.
+        - Dataset divided into as many shards as you want.
+        - Shards make up Sharded Cluster
+        - Each shard in Sharded Cluster is a replica set
+        - Mongos is acting like a router that accepts request from client and redirect.
+        - Mongos uses metadata about which data contained on each shard.
+        - These metadata stored on Config Servers. (**CSRS**: Config Server Replica Set)
+        - Mongos use config servers very often.
+        - These config files uses a _**keyfile**_ but bigger project _**x509**_ 
+        - Config Servers are replica sets too.
+    - Setting Up
+        - Create configuration files (.conf) for every sharding replica set member (node).
+        - These config files similar to standard replica sets members but there are some additions. See below. (see YAML file syntax for config files)
+            - Difference is at the first rows:
+            
+                    sharding:
+                      clusterRole: configsvr
+        - With these config files start mongo daemons (for example for 1st one)
+            - `mongod -f csrc_1.conf` (and other configs at odd numbers)                 - After starting all config server replica members connect to first one (or anyone you choose)
+                - `mongo --port <target members port>` 
+        - And initiate CSRS (Config servers replica set) 
+            - `rs.initiate()`        
+        - Now create super user as we did before on standard replica sets
+            
+                use admin
+                db.createUser({
+                  user: "m103-admin",
+                  pwd: "m103-pass",
+                  roles: [
+                    {role: "root", db: "admin"}
+                  ]
+                })
+
+        - Just after authenticate as this super user with `db.auth("m103-admin", "m103-pass")`                 
+        - Add 2nd and 3rd nodes into CSRS
+            
+                rs.add("192.168.103.100:26002")
+                rs.add("192.168.103.100:26003")
+                rs.add("<members ip number:<members port number>")
+        - Create mongos configuration file (.conf)
+        
+                sharding:
+                  configDB: m103-csrs/192.168.103.100:26001,192.168.103.100:26002,192.168.103.100:26003
+                security:
+                  keyFile: /var/mongodb/pki/m103-keyfile
+                net:
+                  bindIp: localhost,192.168.103.100
+                  port: 26000
+                systemLog:
+                  destination: file
+                  path: /var/mongodb/db/mongos.log
+                  logAppend: true
+                processManagement:
+                  fork: true
+
+        - Connect to mongos with this connection commend (attention to port number)
+         `mongo --port 26000 --username m103-admin --password m103-pass --authenticationDatabase admin`
+         
+         - You can check sharding status with `sh.status()`
+         
+- **Adding Replica Sets to Sharding Cluster**
+    
+    - First update replica sets numbers (nodes) config files
+        - Update with and add this part at the beginnings of each file
+        
+                sharding:
+                  clusterRole: shardsvr
+                storage:
+                  dbPath: /var/mongodb/db/node1
+                  wiredTiger:
+                    engineConfig:
+                      cacheSizeGB: .1 
