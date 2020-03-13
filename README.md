@@ -50,8 +50,8 @@ MongoDB driver has speed and concurrency.
     - Create key file for secure connections between nodes 
         - Use `openssl rand -base64 741 > /folder/path/nameof-keyfile`
     - Start mongo daemon with `mongod -f mongod-1.conf`
-    - Start/run any odd number of mongod nodes. Odd is required to election (voting) for Primer. (3, 5, 7, 9, etc)
-    - Connect first node you create with `mongo --port <given port on conf file>`  
+    - Start/run any odd number of mongod nodes. Odd is required to election (voting) for Primary. (3, 5, 7, 9, etc)
+    - Connect to the first node you create with `mongo --port <given port on conf file>`  
     - Initiating the replica set (replica sets name retrieved from conf files)
         - `rs.initiate()`  
     - Create user with first time local exception access (with chosen user name and password)
@@ -79,6 +79,7 @@ MongoDB driver has speed and concurrency.
             systemLog:
               path: "/data/log/mongod.log"
               destination: "file"
+              logAppend: true
             replication:
               replSetName: m103
             net:
@@ -194,4 +195,10 @@ MongoDB driver has speed and concurrency.
     
             db.adminCommand( { shardCollection: "<database name>.<collectionname>", key: { <shard_key>: 1 } } ) 
 
-    - thats all for now.
+    - **Some notes:**
+    
+    - Each shard replica set contains chunks of sharded data
+    - Each chunk represents inclusive lower bound and exclusive upper bound
+    - CSRS keeps the table of chunk-shard relationships (CSRS= Config Server Replica Set)
+    - Mongos keeps a cached local copy of CSRS table as metadata
+    - If there is a shard key in query (query includes a search criteria with a shardered key) mongos target the single shard of cluster (**Routed Query**). Thus, it passes the merge stage and is very fast. Otherwise (if query does not include a shard key) mongos run search over all shards in the cluster this is **Scatter Gather Query**. It needs to wait for response from all shards, so it is slower than targeted queries (Routed Query).
